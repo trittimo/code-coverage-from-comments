@@ -9,15 +9,12 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "workspaceContains:.vscode/highlight-provider-config.json",
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "coverage-from-comments.helloWorld",
-        "title": "Hello World"
-      }
-    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
