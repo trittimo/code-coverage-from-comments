@@ -1,6 +1,6 @@
 {
   "name": "coverage-from-comments",
-  "displayName": "coverage-from-comments",
+  "displayName": "Coverage From Comments",
   "description": "Add highlighting to a subset of files to determine if you have coverage for them based on comments",
   "version": "0.0.1",
   "engines": {
@@ -10,11 +10,25 @@
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:.vscode/highlight-provider-config.json",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Coverage From Comments",
+      "properties": {
+        "coverage-from-comments.commentSourceFileTypes": {
+          "type": "array",
+          "default": ["*.cs"],
+          "description": "An array of file types from which we should draw the coverage comments"
+        },
+        "coverage-from-comments.renderFileTypes": {
+          "type": "array",
+          "default": ["*.for"],
+          "description": "An array of file types for which we should render the coverage"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
