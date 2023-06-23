@@ -5,6 +5,22 @@ import { HighlightState, CoverageRange } from "./highlightState";
 import path = require("path");
 
 
+const DECORATION_TYPES: Map<string, vscode.TextEditorDecorationType> = new Map();
+DECORATION_TYPES.set("wip", vscode.window.createTextEditorDecorationType({
+        backgroundColor: '#fc8803',
+        border: '1px solid #e2e2e2'
+}));
+
+DECORATION_TYPES.set("ignored", vscode.window.createTextEditorDecorationType({
+    backgroundColor: '#000000',
+    border: '1px solid #e2e2e2'
+}));
+
+DECORATION_TYPES.set("default", vscode.window.createTextEditorDecorationType({
+    backgroundColor: '#60822e',
+    border: '1px solid #e2e2e2'
+}));
+
 const COVERED_DECORATION = vscode.window.createTextEditorDecorationType({
     backgroundColor: '#60822e',
     border: '1px solid #e2e2e2'
@@ -20,7 +36,7 @@ export class DecorationManager implements EditorChangeWatcher {
     onChange(editor: TextEditor) {
         console.log("Change for " + editor.document.uri.fsPath);
         let uri = editor.document.uri;
-        let decorations: vscode.DecorationOptions[] = [];
+        let decorationsMap: Map<string, vscode.DecorationOptions[]> = new Map();
         let ranges = this.highlightState.targetToCoverageMap.get(path.resolve(uri.fsPath));
         if (!ranges) {
             // No decorations for this editor
@@ -34,10 +50,30 @@ export class DecorationManager implements EditorChangeWatcher {
                 console.error("Could not lookup range with rangeKey: " + rangeKey);
                 return;
             }
-            decorations.push({ range: coverageRange.range });
+            if (DECORATION_TYPES.has(coverageRange.kind)) {
+                if (!decorationsMap.get(coverageRange.kind)) {
+                    decorationsMap.set(coverageRange.kind, []);
+                }
+                decorationsMap.get(coverageRange.kind)?.push({ range: coverageRange.range });
+            } else {
+                if (!decorationsMap.get("default")) {
+                    decorationsMap.set("default", []);
+                }
+                decorationsMap.get("default")?.push({ range: coverageRange.range });
+            }
         }
 
-        editor.setDecorations(COVERED_DECORATION, decorations);
+        for (let decorationType of decorationsMap.keys()) {
+            let decoration = DECORATION_TYPES.get(decorationType);
+            if (!decoration) {
+                continue;
+            }
+            let range = decorationsMap.get(decorationType);
+            if (!range) {
+                continue;
+            }
+            editor.setDecorations(decoration, range);
+        }
     }
     dispose() {
         // Nothing to dispose here
