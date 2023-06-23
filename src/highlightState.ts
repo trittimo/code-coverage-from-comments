@@ -4,10 +4,43 @@ import { EditorWatcher } from "./editorWatcher";
 import { readFile } from "fs";
 import path = require("path");
 
-const COMMENT_REGEXES = [
-    /(\S+):L(\d+)\-L(\d+)/, // Matches {any-non-whitespace}:L{digits}-L{digits}
-    /(\S+):L(\d+)/ // Mathches {any-non-whitespace}:L{digits}
-]
+
+class RegexHandler {
+    checkForRanges(line: string, basePath: string, sourcePath: string): CoverageRange[] {
+        let results: CoverageRange[] = [];
+        try {
+            let matchResults = line.match(/(\S+):(L[\d]+.*)/);
+            if (!matchResults) {
+                return results;
+            }
+
+            let targetFile = matchResults[1];
+            let targetPath = path.join(basePath, targetFile);
+            let lineRanges = matchResults[2];
+            console.log(lineRanges);
+            for (let lineRange of lineRanges.split(",")) {
+                let rangeMatch = lineRange.match(/L(\d+)\-L(\d+)/);
+                if (rangeMatch) {
+                    let l0 = Number.parseInt(rangeMatch[1]) - 1;
+                    let l1 = Number.parseInt(rangeMatch[2]) - 1;
+                    let range = new vscode.Range(l0, 0, l1, 999);
+                    results.push(new CoverageRange(targetPath, sourcePath, range));
+                    console.log("\t" + rangeMatch[1] + "," + rangeMatch[2]);
+                    continue;
+                }
+                rangeMatch = lineRange.match(/L(\d+)/);
+                if (rangeMatch) {
+                    let l0 = Number.parseInt(rangeMatch[1]) - 1;
+                    let range = new vscode.Range(l0, 0, l0, 999);
+                    results.push(new CoverageRange(targetPath, sourcePath, range));
+                }
+            }
+        } catch {
+            console.error("Encountered exception parsing line in " + sourcePath);
+        }
+        return results;
+    }
+}
 
 export class CoverageRange {
     targetPath: string;
@@ -51,34 +84,15 @@ export class HighlightState implements FileChangeWatcher {
     // We use this when a file is deleted or modified to remove the matches created by it
     sourceToCoverageMap: Map<string, Set<string>>;
 
+    
+    regexHandler: RegexHandler;
+
     constructor(editorWatcher: EditorWatcher) {
         this.editorWatcher = editorWatcher;
         this.keyToCoverageMap = new Map();
         this.targetToCoverageMap = new Map();
         this.sourceToCoverageMap = new Map();
-    }
-
-    getCoverageRangeFromMatch(matches: RegExpMatchArray, basePath: string, sourcePath: string): CoverageRange | null {
-        try {
-            let targetFile = matches[1];
-            
-            let targetPath = path.join(basePath, targetFile);
-            let l0 = Number.parseInt(matches[2]);
-            let range: vscode.Range;
-            if (matches.length >= 4) { // Matches file:L1-L2
-                let l1 = Number.parseInt(matches[3]);
-                // Assumes comments are 1-indexed, hence subtracting one to match the expected 0-index vscode.Range object
-                // Presumably the lines we care about aren't more than 999 characters long
-                // vscode will truncate when actually rendering the background color
-                range = new vscode.Range(l0 - 1, 0, l1 - 1, 999);
-            } else { // Matches file:L1
-                range = new vscode.Range(l0 - 1, 0, l0 - 1, 999);
-            }
-            return new CoverageRange(targetPath, sourcePath, range);
-        } catch {
-            console.error(`Encountered error trying to match line`);
-        }
-        return null;
+        this.regexHandler = new RegexHandler();
     }
 
     onChange(uri: vscode.Uri) {
@@ -115,26 +129,17 @@ export class HighlightState implements FileChangeWatcher {
             let currMatches = new Set<string>();
             let changedFiles = new Set<string>();
             for (let i = 0; i < lines.length; i++) {
-                for (let regex of COMMENT_REGEXES) {
-                    let matches = lines[i].match(regex);
-                    if (!matches) {
-                        continue;
+                for (let coverageRange of this.regexHandler.checkForRanges(lines[i], basePath, sourcePath)) {
+                    console.debug("Found coverage range mapping from " + coverageRange.sourcePath + " to " + coverageRange.targetPath);
+                    let set = this.targetToCoverageMap.get(coverageRange.targetPath);
+                    if (!set) {
+                        set = new Set<string>();
+                        this.targetToCoverageMap.set(coverageRange.targetPath, set);
                     }
-
-                    let coverageRange = this.getCoverageRangeFromMatch(matches, basePath, sourcePath);
-                    if (coverageRange) {
-                        console.log("Found coverage range mapping from " + coverageRange.sourcePath + " to " + coverageRange.targetPath);
-                        let set = this.targetToCoverageMap.get(coverageRange.targetPath);
-                        if (!set) {
-                            set = new Set<string>();
-                            this.targetToCoverageMap.set(coverageRange.targetPath, set);
-                        }
-                        set.add(coverageRange.key);
-                        this.keyToCoverageMap.set(coverageRange.key, coverageRange);
-                        currMatches.add(coverageRange.key);
-                        changedFiles.add(coverageRange.targetPath);
-                        break;
-                    }
+                    set.add(coverageRange.key);
+                    this.keyToCoverageMap.set(coverageRange.key, coverageRange);
+                    currMatches.add(coverageRange.key);
+                    changedFiles.add(coverageRange.targetPath);
                 }
             }
 
