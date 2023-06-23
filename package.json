@@ -19,12 +19,12 @@
       "properties": {
         "coverage-from-comments.commentSourceFileTypes": {
           "type": "array",
-          "default": ["*.cs"],
+          "default": ["**/*.cs"],
           "description": "An array of file types from which we should draw the coverage comments"
         },
         "coverage-from-comments.renderFileTypes": {
           "type": "array",
-          "default": ["*.for"],
+          "default": ["**/*.FOR", "**/*.INC", "**/*.PF"],
           "description": "An array of file types for which we should render the coverage"
         }
       }
