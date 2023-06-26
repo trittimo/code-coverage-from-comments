@@ -22,7 +22,6 @@ class RegexHandler {
             let kind = "default";
             if (kindMatch) {
                 kind = kindMatch[1].toLowerCase();
-                console.log("Discovered kind: " + kind);
             }
             for (let lineRange of lineRanges.split(",")) {
                 let rangeMatch = lineRange.match(/L(\d+)\-L(\d+)/);
@@ -61,22 +60,19 @@ export class CoverageRange {
         this.range = range;
         this.kind = kind;
         // This is used as an index for the Set containing these since we can't use objects
-        this.key = (targetPath + sourcePath + range.start.line + range.end.line);
+        this.key = (targetPath + sourcePath + range.start.line + ":" + range.end.line);
     }
 }
 
-function *setNegation<T>(setA: Set<T>, setB: Set<T>) {
-    let A = new Set<T>(setA);
-    let B = new Set<T>(setB);
-    for (let b of B.values()) {
-        if (!setA.delete(b)) {
-            yield b;
+function getDeletedReferences(prevMatches: Set<string>, currMatches: Set<string>): string[] {
+    let result: string[] = [];
+    for (let prevMatch of prevMatches) {
+        if (!currMatches.has(prevMatch)) {
+            result.push(prevMatch);
         }
     }
 
-    for (let a of setA.values()) {
-        yield a;
-    }
+    return result;
 }
 
 export class HighlightState implements FileChangeWatcher {
@@ -155,14 +151,22 @@ export class HighlightState implements FileChangeWatcher {
             // make sure we remove any that aren't present anymore
             let prevMatches = this.sourceToCoverageMap.get(sourcePath);
             if (prevMatches) {
-                let missing = Array.from(setNegation(prevMatches, currMatches));
+                let missing = getDeletedReferences(prevMatches, currMatches);
                 for (let key of missing) {
+                    console.log("Found missing key: " + key);
                     let coverage = this.keyToCoverageMap.get(key);
                     if (!coverage) {
                         // This shouldn't be possible
                         throw new Error("Missing coverage item");
                     }
-                    this.targetToCoverageMap.get(coverage.targetPath)?.delete(coverage.key);
+                    let coverageMap = this.targetToCoverageMap.get(coverage.targetPath);
+                    if (coverageMap) {
+                        console.log("\tDeleting coverage key");
+                        coverageMap.delete(coverage.key);
+                        changedFiles.add(coverage.targetPath);
+                    } else {
+                        console.log("\tUnable to delete coverage key?");
+                    }
                     this.keyToCoverageMap.delete(key); // We could probably leave it in-place, but no reason to let this map grow without bounds
                 }
             }
