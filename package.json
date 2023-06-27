@@ -2,7 +2,7 @@
   "name": "coverage-from-comments",
   "displayName": "Coverage From Comments",
   "description": "Add highlighting to a subset of files to determine if you have coverage for them based on comments",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "repository": "https://github.com/trittimo/code-coverage-from-comments",
   "license": "MIT",
   "engines": {
