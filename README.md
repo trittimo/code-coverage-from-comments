@@ -70,3 +70,6 @@ You can also add short descriptions to your comments without negatively impaacti
 
 Finally, you may specify the following code as being `WIP`, `IGNORED`, or `COMPLETE`. This will change the color of the highlighting in the target files. `COMPLETE` is the default case so it may be removed if so desired.
 - `file_name_relative_to_project_directory:L{x}-L{y} This is an implementation of some feature from the other project (WIP)`
+
+### Important Note
+You may notice that the comment format makes no note of what type of comment your source language uses. This is because it will match anything and everything that happens to meet the above criteria, even if it isn't really in a comment.
