@@ -3,6 +3,7 @@ import { EditorWatcher } from './editorWatcher';
 import { SourceWatcher } from './sourceWatcher';
 import { HighlightState } from './highlightState';
 import { DecorationManager } from './decorationManager';
+import { DocumentDetailProvider } from './documentDetailProvider';
 
 class CoverageExtension {
     disposables: vscode.Disposable[];
@@ -38,7 +39,15 @@ class CoverageExtension {
         sourceWatcher.addSubscriber(highlightState);
         editorWatcher.addSubscriber(decorationManager);
 
+        let documentDetailProvider = new DocumentDetailProvider(config.get("renderFileTypes", []), highlightState);
+        let selector = documentDetailProvider.getSelector();
+
         sourceWatcher.forceNotify();
+
+        this.context.subscriptions.push(
+            //vscode.languages.registerDocumentSymbolProvider(selector, documentDetailProvider),
+            vscode.languages.registerDefinitionProvider(selector, documentDetailProvider));
+
     }
 
     dispose() {

@@ -37,7 +37,7 @@ export class EditorWatcher {
     setup(): EditorWatcher {
         this.changeWatchers.push(vscode.window.onDidChangeActiveTextEditor(e => {
             // This notifies subscribers when the user switches the currently active editor (i.e. by switching tabs)
-            console.log("Active text editor changed");
+            // console.log("Active text editor changed");
             if (e && this.isDocumentRelevant(e.document)) {
                 this.subscribers.forEach(s => s.onChange(e));
             }

@@ -29,7 +29,7 @@ export class DecorationManager implements EditorChangeWatcher {
     }
 
     onChange(editor: TextEditor) {
-        console.log("Change for " + editor.document.uri.fsPath);
+        // console.log("Change for " + editor.document.uri.fsPath);
         let uri = editor.document.uri;
         let decorationsMap: Map<string, vscode.DecorationOptions[]> = new Map();
         let ranges = this.highlightState.targetToCoverageMap.get(path.resolve(uri.fsPath));

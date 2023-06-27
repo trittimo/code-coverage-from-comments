@@ -6,7 +6,7 @@ import path = require("path");
 
 
 class RegexHandler {
-    checkForRanges(line: string, basePath: string, sourcePath: string): CoverageRange[] {
+    checkForRanges(line: string, basePath: string, sourcePath: string, lineNumber: number): CoverageRange[] {
         let results: CoverageRange[] = [];
         try {
             let matchResults = line.match(/(\S+):(L[\d]+.*)/);
@@ -29,7 +29,7 @@ class RegexHandler {
                     let l0 = Number.parseInt(rangeMatch[1]) - 1;
                     let l1 = Number.parseInt(rangeMatch[2]) - 1;
                     let range = new vscode.Range(l0, 0, l1, 999);
-                    results.push(new CoverageRange(targetPath, sourcePath, range, kind));
+                    results.push(new CoverageRange(targetPath, sourcePath, range, kind, line.trim(), lineNumber));
                     // console.log("\t" + rangeMatch[1] + "," + rangeMatch[2]);
                     continue;
                 }
@@ -37,7 +37,7 @@ class RegexHandler {
                 if (rangeMatch) {
                     let l0 = Number.parseInt(rangeMatch[1]) - 1;
                     let range = new vscode.Range(l0, 0, l0, 999);
-                    results.push(new CoverageRange(targetPath, sourcePath, range, kind));
+                    results.push(new CoverageRange(targetPath, sourcePath, range, kind, line.trim(), lineNumber));
                 }
             }
         } catch {
@@ -52,13 +52,17 @@ export class CoverageRange {
     sourcePath: string;
     range: vscode.Range;
     key: string;
+    comment: string;
     kind: string;
+    sourceLine: number;
 
-    constructor(targetPath: string, sourcePath: string, range: vscode.Range, kind: string) {
+    constructor(targetPath: string, sourcePath: string, range: vscode.Range, kind: string, comment: string, sourceLine: number) {
         this.targetPath = targetPath;
         this.sourcePath = sourcePath;
         this.range = range;
         this.kind = kind;
+        this.comment = comment;
+        this.sourceLine = sourceLine;
         // This is used as an index for the Set containing these since we can't use objects
         this.key = (targetPath + sourcePath + range.start.line + ":" + range.end.line);
     }
@@ -133,7 +137,7 @@ export class HighlightState implements FileChangeWatcher {
             let currMatches = new Set<string>();
             let changedFiles = new Set<string>();
             for (let i = 0; i < lines.length; i++) {
-                for (let coverageRange of this.regexHandler.checkForRanges(lines[i], basePath, sourcePath)) {
+                for (let coverageRange of this.regexHandler.checkForRanges(lines[i], basePath, sourcePath, i + 1)) {
                     // console.debug("Found coverage range mapping from " + coverageRange.sourcePath + " to " + coverageRange.targetPath);
                     let set = this.targetToCoverageMap.get(coverageRange.targetPath);
                     if (!set) {
