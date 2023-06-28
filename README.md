@@ -54,6 +54,7 @@ The following configuration options are available:
 | -------------------- | ---- | ------------- | ----------- |
 | coverage-from-comments.commentSourceFileTypes | Array | `["**/*.cs"]` | An array of glob patterns which match files relative to the opened project directory. These will be referenced to determine from which source files we should examine comments from. In the example given in this README, this should target C# files. |
 | coverage-from-comments.renderFileTypes | Array | `["**/*.FOR", "**/*.INC", "**/*.PF"]` | An array of glob patterns which match files relative to the opened project directory. These will be referenced to determine which source files we should render the code coverage blocks in. In the example given in this README, this should target Python files. |
+| coverage-from-comments.colors | Object | <code><pre>{<br>  "wip": {<br>    "backgroundColor": "rgba(122, 70, 10, 0.5)",<br>    "border": "1px solid #e2e2e2"<br>  },<br>  "ignored": {<br>    "backgroundColor": "#000000",<br>    "border": "1px solid #e2e2e2"<br>  },<br>  "default": {<br>    "backgroundColor": "rgba(35, 80, 38, 0.5)",<br>    "border": "1px solid #e2e2e2"<br>  }<br>}</pre></code> | This specifies the colors used for extension highlighting |
 
 
 ### Usage

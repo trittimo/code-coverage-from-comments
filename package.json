@@ -2,7 +2,7 @@
   "name": "coverage-from-comments",
   "displayName": "Coverage From Comments",
   "description": "Add highlighting to a subset of files to determine if you have coverage for them based on comments",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "repository": "https://github.com/trittimo/code-coverage-from-comments",
   "license": "MIT",
   "engines": {
@@ -28,6 +28,23 @@
           "type": "array",
           "default": ["**/*.FOR", "**/*.INC", "**/*.PF"],
           "description": "An array of file types for which we should render the coverage"
+        },
+        "coverage-from-comments.colors": {
+          "type": "object",
+          "default": {
+            "wip": {
+              "backgroundColor": "rgba(122, 70, 10, 0.5)",
+              "border": "1px solid #e2e2e2"
+            },
+            "ignored": {
+              "backgroundColor": "#000000",
+              "border": "1px solid #e2e2e2"
+            },
+            "default": {
+              "backgroundColor": "rgba(35, 80, 38, 0.5)",
+              "border": "1px solid #e2e2e2"
+            }
+          }
         }
       }
     }

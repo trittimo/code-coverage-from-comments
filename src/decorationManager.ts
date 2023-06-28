@@ -5,21 +5,19 @@ import { HighlightState, CoverageRange } from "./highlightState";
 import path = require("path");
 
 
+function getDecorationType(name: string) {
+    let config = vscode.workspace.getConfiguration("coverage-from-comments");
+    if (config.has(`colors.${name}`)) {
+        let colors = config.get(`colors.${name}`);
+        return vscode.window.createTextEditorDecorationType(colors as vscode.DecorationRenderOptions);
+    }
+    throw new Error("Unable to get decoration config: " + name);
+}
+
 const DECORATION_TYPES: Map<string, vscode.TextEditorDecorationType> = new Map();
-DECORATION_TYPES.set("wip", vscode.window.createTextEditorDecorationType({
-        backgroundColor: 'rgba(122, 70, 10, 0.5)',
-        border: '1px solid #e2e2e2',
-}));
-
-DECORATION_TYPES.set("ignored", vscode.window.createTextEditorDecorationType({
-    backgroundColor: '#000000',
-    border: '1px solid #e2e2e2',
-}));
-
-DECORATION_TYPES.set("default", vscode.window.createTextEditorDecorationType({
-    backgroundColor: 'rgba(35, 80, 38, 0.5)',
-    border: '1px solid #e2e2e2',
-}));
+DECORATION_TYPES.set("wip", getDecorationType("wip"));
+DECORATION_TYPES.set("ignored", getDecorationType("ignored"));
+DECORATION_TYPES.set("default", getDecorationType("default"));
 
 // This class receives notifications from the EditorWatcher and updates the visuals
 export class DecorationManager implements EditorChangeWatcher {
