@@ -4,6 +4,7 @@ import { SourceWatcher } from './sourceWatcher';
 import { HighlightState } from './highlightState';
 import { DecorationManager } from './decorationManager';
 import { DocumentDetailProvider } from './documentDetailProvider';
+import path = require('path');
 
 class CoverageExtension {
     disposables: vscode.Disposable[];
@@ -47,13 +48,45 @@ class CoverageExtension {
         this.context.subscriptions.push(
             //vscode.languages.registerDocumentSymbolProvider(selector, documentDetailProvider),
             vscode.languages.registerDefinitionProvider(selector, documentDetailProvider));
-
     }
 
     dispose() {
         this.disposables.forEach(d => d.dispose());
         this.disposables = [];
     }
+}
+
+export function copy(data: string) {
+    require('child_process').spawn('clip').stdin.end(data);
+}
+
+export function copyLineRange(editor: vscode.TextEditor, edit: vscode.TextEditorEdit, ...args: any[]) {
+    if (editor.selections.length != 1) {
+        vscode.window.showErrorMessage("You must have exactly one selection to use this command");
+        return;
+    }
+
+    let filePath = path.resolve(editor.document.fileName);
+    let workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+    let fileName = "";
+    if (workspaceFolder == undefined) {
+        fileName = "{unnamedfile}";
+    } else {
+        let folderPath = path.resolve(workspaceFolder.uri.fsPath);
+        fileName = filePath.replace(folderPath, "").replace(/\\/g, "/");
+        if (fileName.startsWith("/")) {
+            fileName = fileName.slice(1);
+        }
+    }
+
+    let range = new vscode.Range(editor.selection.start, editor.selection.end);
+    if (range.isSingleLine) {
+        copy(fileName + ":L" + (range.start.line + 1));
+    } else {
+        copy(`${fileName}:L${range.start.line+1}-L${range.end.line+1}`);
+    }
+
+    vscode.window.showInformationMessage("Copied range to clipboard");
 }
 
 // This method is called when your extension is activated
@@ -65,6 +98,8 @@ export function activate(context: vscode.ExtensionContext) {
             extension.reload();
         }
     });
+
+    context.subscriptions.push(vscode.commands.registerTextEditorCommand("coverage-from-comments.copyLineRange", copyLineRange));
     extension.reload();
 }
 
