@@ -92,7 +92,6 @@ export class HighlightState implements FileChangeWatcher {
     // We use this when a file is deleted or modified to remove the matches created by it
     sourceToCoverageMap: Map<string, Set<string>>;
 
-    
     regexHandler: RegexHandler;
 
     constructor(editorWatcher: EditorWatcher) {

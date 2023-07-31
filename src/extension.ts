@@ -1,14 +1,16 @@
 import * as vscode from 'vscode';
 import { EditorWatcher } from './editorWatcher';
 import { SourceWatcher } from './sourceWatcher';
-import { HighlightState } from './highlightState';
+import { CoverageRange, HighlightState } from './highlightState';
 import { DecorationManager } from './decorationManager';
 import { DocumentDetailProvider } from './documentDetailProvider';
 import path = require('path');
+import { isArray } from 'util';
 
 class CoverageExtension {
     disposables: vscode.Disposable[];
     context: vscode.ExtensionContext;
+    highlightState: HighlightState | undefined;
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -32,15 +34,15 @@ class CoverageExtension {
 
         // This is the class responsible for reading file contents and maintaining the state of comment coverage
         // It will also tell the EditorWatcher when a change is made to an external file
-        let highlightState = new HighlightState(editorWatcher);
+        this.highlightState = new HighlightState(editorWatcher);
 
         // This is the class responsible for actually decorating the UI
-        let decorationManager = new DecorationManager(highlightState);
+        let decorationManager = new DecorationManager(this.highlightState);
 
-        sourceWatcher.addSubscriber(highlightState);
+        sourceWatcher.addSubscriber(this.highlightState);
         editorWatcher.addSubscriber(decorationManager);
 
-        let documentDetailProvider = new DocumentDetailProvider(config.get("renderFileTypes", []), highlightState);
+        let documentDetailProvider = new DocumentDetailProvider(config.get("renderFileTypes", []), this.highlightState);
         let selector = documentDetailProvider.getSelector();
 
         sourceWatcher.forceNotify();
@@ -50,10 +52,70 @@ class CoverageExtension {
             vscode.languages.registerDefinitionProvider(selector, documentDetailProvider));
     }
 
+    
+    summarizeLines(editor: vscode.TextEditor, edit: vscode.TextEditorEdit, ...args: any[]) {
+        let summary: any = {};
+        for (let [_, coverageRange] of this.highlightState!.keyToCoverageMap) {
+            let workspace = vscode.workspace.workspaceFolders![0];
+            let workspacePath = path.resolve(workspace.uri.fsPath) + "\\";
+            let targets = coverageRange.targetPath.replace(workspacePath, "").split("\\");
+            let currTarget: any = summary;
+            for (let i = 0; i < targets.length; i++) {
+                let target = targets[i];
+                if (!(target in currTarget)) {
+                    if (i == targets.length - 1) {
+                        currTarget[target] = [];
+                    } else {
+                        currTarget[target] = {};
+                    }
+                }
+                currTarget = currTarget[target];
+            }
+            currTarget.push(coverageRange);
+        }
+
+        let result = summarize(summary, 0);
+
+        copy(result);
+        vscode.window.showInformationMessage("Copied summary to clipboard");
+    }
+
     dispose() {
         this.disposables.forEach(d => d.dispose());
         this.disposables = [];
     }
+}
+
+function summarize(target: any, indent: number): string {
+    try {
+        if (isArray(target)) {
+            return "";
+        }
+        let result = "";
+        for (let key in target) {
+            result += " ".repeat(indent * 4);
+            let summary = summarize(target[key], indent + 1);
+            result += key + ": " + countRanges(target[key]) + "\n" + summary;
+        }
+        return result;
+    } catch (ex) {
+        console.log(ex);
+        return "";
+    }
+}
+
+function countRanges(target: any): number {
+    let count = 0;
+    if (isArray(target)) {
+        for (let entry of target) {
+            count += (entry as CoverageRange).range.end.line - (entry as CoverageRange).range.start.line + 1;
+        }
+        return count;
+    }
+    for (let key in target) {
+        count += countRanges(target[key]);
+    }
+    return count;
 }
 
 export function copy(data: string) {
@@ -99,7 +161,12 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    let summarizeLines = (editor: vscode.TextEditor, edit: vscode.TextEditorEdit, ...args: any[]) => {
+        return extension.summarizeLines(editor, edit, args);
+    }
+
     context.subscriptions.push(vscode.commands.registerTextEditorCommand("coverage-from-comments.copyLineRange", copyLineRange));
+    context.subscriptions.push(vscode.commands.registerTextEditorCommand("coverage-from-comments.summarizeLines", summarizeLines));
     extension.reload();
 }
 
