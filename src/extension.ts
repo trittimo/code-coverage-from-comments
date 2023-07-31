@@ -6,6 +6,7 @@ import { DecorationManager } from './decorationManager';
 import { DocumentDetailProvider } from './documentDetailProvider';
 import path = require('path');
 import { isArray } from 'util';
+import { existsSync, readFileSync } from 'fs';
 
 class CoverageExtension {
     disposables: vscode.Disposable[];
@@ -108,7 +109,30 @@ function countRanges(target: any): number {
     let count = 0;
     if (isArray(target)) {
         for (let entry of target) {
-            count += (entry as CoverageRange).range.end.line - (entry as CoverageRange).range.start.line + 1;
+            let entryRange = (entry as CoverageRange);
+            if (!existsSync(entryRange.targetPath)) {
+                console.log("Cannot read file: " + entryRange.targetPath);
+                count += entryRange.range.end.line - entryRange.range.start.line + 1;
+                continue;
+            }
+            let file = readFileSync(entryRange.targetPath).toString().split("\n");
+            for (let lineIndex = entryRange.range.start.line; lineIndex <= entryRange.range.end.line; lineIndex++) {
+                if (lineIndex > file.length) {
+                    console.log("Range is larger than file");
+                    break;
+                }
+                let line = file[lineIndex].trim();
+                if (line.length == 0) {
+                    // Whitespace: ignore
+                    continue;
+                }
+
+                if (line.startsWith("!")) {
+                    // Comment: ignore
+                    continue;
+                }
+                count += 1;
+            }
         }
         return count;
     }
