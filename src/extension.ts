@@ -117,7 +117,7 @@ function countRanges(target: any): number {
             }
             let file = readFileSync(entryRange.targetPath).toString().split("\n");
             for (let lineIndex = entryRange.range.start.line; lineIndex <= entryRange.range.end.line; lineIndex++) {
-                if (lineIndex > file.length) {
+                if (lineIndex >= file.length || file[lineIndex] == undefined) {
                     console.log("Range is larger than file");
                     break;
                 }
