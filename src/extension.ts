@@ -6,7 +6,7 @@ import { DecorationManager } from './decorationManager';
 import { DocumentDetailProvider } from './documentDetailProvider';
 import path = require('path');
 import { isArray } from 'util';
-import { Dirent, existsSync, readFileSync, readdirSync, writeFileSync } from 'fs';
+import { Dirent, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 
 class CoverageExtension {
     disposables: vscode.Disposable[];
@@ -197,6 +197,27 @@ function getLineTotals(dir: string): Map<string, Map<string, number>> {
 }
 
 function summarize(target: any): string {
+    let completedProjects: Record<string, Array<string>> = {};
+    if (vscode.workspace.rootPath != undefined) {
+        let vscodePath = path.join(vscode.workspace.rootPath, ".vscode");
+        let completedPath = path.join(vscodePath, "completed_projects.json");
+        
+        if (!existsSync(vscodePath)) {
+            mkdirSync(vscodePath);
+        }
+    
+    
+        if (existsSync(completedPath)) {
+            let content = readFileSync(completedPath, {"encoding": "utf-8"});
+            try {
+                completedProjects = JSON.parse(content) as Record<string, Array<string>>;
+            } catch (ex) {
+                vscode.window.showErrorMessage("Cannot parse .vscode/completed_projects.json - not valid JSON array");
+            }
+        }
+    }
+
+
     let csvRows: Array<[string,string,string|number,string|number]> = [["directory","file","covered","total"]];
     for (let projectName in target) {
         let project = target[projectName];
@@ -247,7 +268,11 @@ function summarize(target: any): string {
                 }
                 csvRows.push(["", fileName, totalFileCovered, totalLines]);
             }
+
             dirRow[3] = directoryTotal;
+            if (projectName in completedProjects && completedProjects[projectName].indexOf(directoryName) > -1) {
+                dirRow[2] = directoryTotal;
+            }
         }
     }
 
@@ -292,6 +317,74 @@ export function copyLineRange(editor: vscode.TextEditor, edit: vscode.TextEditor
     vscode.window.showInformationMessage("Copied range to clipboard");
 }
 
+export function markCompleted(editor: vscode.TextEditor, edit: vscode.TextEditorEdit, ...args: any[]) {
+    if (vscode.workspace.rootPath === undefined) {
+        vscode.window.showErrorMessage("No workspace opened");
+        return;
+    }
+
+    if (editor.document.uri.fsPath === undefined) {
+        vscode.window.showErrorMessage("Current editor is not a file in the folder you would like to mark completed");
+        return;
+    }
+
+
+    let vscodePath = path.join(vscode.workspace.rootPath, ".vscode");
+    let completedPath = path.join(vscodePath, "completed_projects.json");
+
+    let relFilePath = path.resolve(editor.document.uri.fsPath).replace(path.resolve(vscode.workspace.rootPath) + path.sep, "");
+    let [projectName, folderName] = relFilePath.split(path.sep);
+    
+    
+    if (!existsSync(vscodePath)) {
+        mkdirSync(vscodePath);
+    }
+
+    let completed: Record<string, Array<string>> = {};
+
+    if (existsSync(completedPath)) {
+        let content = readFileSync(completedPath, {"encoding": "utf-8"});
+        try {
+            completed = JSON.parse(content) as Record<string, Array<string>>;
+        } catch (ex) {
+            vscode.window.showErrorMessage("Cannot parse .vscode/completed_projects.json - not valid JSON array");
+        }
+    }
+
+    vscode.window.showInformationMessage(`Mark '${projectName}/${folderName}' as completed?`, "Yes", "No").then(choice => {
+        if (choice == undefined || choice == "No") {
+            return;
+        }
+
+        if (!(projectName in completed)) {
+            completed[projectName] = [];
+        }
+        if (completed[projectName].indexOf(folderName) > -1) {
+            vscode.window.showInformationMessage(`${folderName} already marked as completed`);
+            return;
+        }
+        completed[projectName].push(folderName);
+        writeFileSync(completedPath, JSON.stringify(completed, null, 4));
+        vscode.window.showInformationMessage(`${projectName}/${folderName} marked as completed`);
+    });
+
+}
+
+export function markUncompleted(editor: vscode.TextEditor, edit: vscode.TextEditorEdit, ...args: any[]) {
+    if (vscode.workspace.rootPath === undefined) {
+        vscode.window.showErrorMessage("No workspace opened");
+        return;
+    }
+
+    if (!existsSync(".vscode")) {
+        return;
+    }
+
+    vscode.window.showErrorMessage("Not yet implemented - edit .vscode/completed_projects.json");
+
+    // TODO
+}
+
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
@@ -308,6 +401,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.commands.registerTextEditorCommand("coverage-from-comments.copyLineRange", copyLineRange));
     context.subscriptions.push(vscode.commands.registerTextEditorCommand("coverage-from-comments.summarizeLines", summarizeLines));
+    context.subscriptions.push(vscode.commands.registerTextEditorCommand("coverage-from-comments.markCompleted", markCompleted));
+    context.subscriptions.push(vscode.commands.registerTextEditorCommand("coverage-from-comments.markUncompleted", markUncompleted));
+
     extension.reload();
 }
 

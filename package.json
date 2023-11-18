@@ -26,6 +26,16 @@
         "command": "coverage-from-comments.summarizeLines",
         "title": "Summarize Coverage",
         "category": "Coverage from Comments"
+      },
+      {
+        "command": "coverage-from-comments.markCompleted",
+        "title": "Mark Folder Completed",
+        "category": "Coverage from Comments"
+      },
+      {
+        "command": "coverage-from-comments.markUncompleted",
+        "title": "Unmark Folder Completed",
+        "category": "Coverage from Comments"
       }
     ],
     "configuration": {
