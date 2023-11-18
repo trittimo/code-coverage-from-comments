@@ -6,7 +6,7 @@ import { DecorationManager } from './decorationManager';
 import { DocumentDetailProvider } from './documentDetailProvider';
 import path = require('path');
 import { isArray } from 'util';
-import { existsSync, readFileSync } from 'fs';
+import { Dirent, existsSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 
 class CoverageExtension {
     disposables: vscode.Disposable[];
@@ -75,10 +75,33 @@ class CoverageExtension {
             currTarget.push(coverageRange);
         }
 
-        let result = summarize(summary, 0);
+        let result = summarize(summary);
 
-        copy(result);
-        vscode.window.showInformationMessage("Copied summary to clipboard");
+        const today = new Date();
+
+        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+        const day = today.getDate().toString().padStart(2, '0');
+        const year = today.getFullYear().toString();
+
+        let date = `${month}-${day}-${year}`;
+
+        const outputPath = resolvePathWithEnvVariable(`%UserProfile%/Flexware Innovation, Inc/Logan Aluminum - 204892_CM2 Level 2 Conversion/Project Management/Coverage Summaries/summary-${date}`);
+
+        let uri = vscode.Uri.file(outputPath);
+        vscode.window.showSaveDialog({
+            defaultUri: uri,
+            filters: {
+                "CSV": ["csv"]
+            },
+            saveLabel: "Save Summary",
+            title: "Save Coverage Summary"
+        }).then(uri => {
+            if (uri == undefined) return;
+            writeFileSync(uri.fsPath, result, {encoding: "utf-8"});
+        });
+
+        // copy(result);
+        // vscode.window.showInformationMessage("Copied summary to clipboard");
     }
 
     dispose() {
@@ -87,59 +110,153 @@ class CoverageExtension {
     }
 }
 
-function summarize(target: any, indent: number): string {
-    try {
-        if (isArray(target)) {
-            return "";
-        }
-        let result = "";
-        for (let key in target) {
-            result += " ".repeat(indent * 4);
-            let summary = summarize(target[key], indent + 1);
-            result += key + ": " + countRanges(target[key]) + "\n" + summary;
-        }
-        return result;
-    } catch (ex) {
-        console.log(ex);
-        return "";
-    }
+function resolvePathWithEnvVariable(inputPath: string): string {
+    // Use a regular expression to find environment variables in the path
+    const envVarRegex = /%([^%]+)%/g;
+
+    // Replace each environment variable with its value
+    const resolvedPath = inputPath.replace(envVarRegex, (_, envVar) => process.env[envVar] || '');
+
+    // Use path.resolve to convert the resolved path to an absolute path
+    const absolutePath = path.resolve(resolvedPath);
+
+    return absolutePath;
 }
 
-function countRanges(target: any): number {
-    let count = 0;
-    if (isArray(target)) {
-        for (let entry of target) {
-            let entryRange = (entry as CoverageRange);
-            if (!existsSync(entryRange.targetPath)) {
-                console.log("Cannot read file: " + entryRange.targetPath);
-                count += entryRange.range.end.line - entryRange.range.start.line + 1;
-                continue;
-            }
-            let file = readFileSync(entryRange.targetPath).toString().split("\n");
-            for (let lineIndex = entryRange.range.start.line; lineIndex <= entryRange.range.end.line; lineIndex++) {
-                if (lineIndex >= file.length || file[lineIndex] == undefined) {
-                    console.log("Range is larger than file");
-                    break;
-                }
-                let line = file[lineIndex].trim();
-                if (line.length == 0) {
-                    // Whitespace: ignore
-                    continue;
-                }
+function countRanges(ranges: Array<[number, number]>): number {
+    // Sort the ranges based on their starting points
+    ranges.sort((a, b) => a[0] - b[0]);
 
-                if (line.startsWith("!")) {
-                    // Comment: ignore
-                    continue;
-                }
-                count += 1;
+    let totalLength = 0;
+    let currentRange: [number, number] | null = null;
+
+    for (const range of ranges) {
+        if (currentRange === null) {
+            // If there is no current range, set the current range to the current range in the iteration
+            currentRange = range;
+        } else {
+            // Check for overlap with the current range
+            if (range[0] <= currentRange[1]) {
+                // If overlap, update the end point of the current range if the current range extends further
+                currentRange[1] = Math.max(currentRange[1], range[1]);
+            } else {
+                // If no overlap, add the length of the current range to the total length
+                totalLength += currentRange[1] - currentRange[0] + 1;
+                // Set the current range to the current range in the iteration
+                currentRange = range;
             }
         }
-        return count;
     }
-    for (let key in target) {
-        count += countRanges(target[key]);
+
+    // Add the length of the last remaining range (if any)
+    if (currentRange !== null) {
+        totalLength += currentRange[1] - currentRange[0] + 1;
     }
-    return count;
+
+    return totalLength;
+}
+
+function countFile(path: string): number {
+    if (!existsSync(path)) {
+        return 0;
+    }
+
+    let fileContent = readFileSync(path, {encoding: "utf-8"});
+    return fileContent.split("\n").length;
+}
+
+function isFortranFile(dirent: Dirent): boolean {
+    if (!dirent.isFile()) return false;
+    let name = dirent.name.toLowerCase();
+    if (name.endsWith(".inc") || name.endsWith(".for") || name.endsWith(".pf")) return true;
+    return false;
+}
+
+function getLineTotals(dir: string): Map<string, Map<string, number>> {
+    if (vscode.workspace.rootPath === undefined) {
+        throw new Error("No workspace open");
+    }
+    dir = path.join(vscode.workspace.rootPath, dir);
+    if (!existsSync(dir)) {
+        vscode.window.showErrorMessage("Unable to find root project directory");
+        throw new Error("Unable to find root project directory");
+    }
+    let result = new Map<string, Map<string, number>>();
+
+    let folders = readdirSync(dir, {encoding: "utf-8", recursive: false, withFileTypes: true});
+    for (let folder of folders.filter(f => f.isDirectory())) {
+        let summary = new Map<string, number>();
+        result.set(folder.name, summary);
+        let files = readdirSync(path.join(dir, folder.name), {encoding: "utf-8", recursive: true, withFileTypes: true});
+        for (let file of files.filter(isFortranFile)) {
+            summary.set(file.name, countFile(path.join(dir, folder.name, file.name)));
+        }
+    }
+
+    return result;
+}
+
+function summarize(target: any): string {
+    let csvRows: Array<[string,string,string|number,string|number]> = [["directory","file","covered","total"]];
+    for (let projectName in target) {
+        let project = target[projectName];
+        let lineTotals = getLineTotals(projectName);
+        let fileCoverage = new Map<string, Map<string, number>>();
+        let directoryCoverage = new Map<string, number>();
+        for (let directoryName in project) {
+            let directory = project[directoryName];
+            let totalDirectoryCovered = 0;
+            for (let fileName in directory) {
+                let file = directory[fileName];
+                let ranges: Array<[number, number]> = [];
+                for (let coverageRange of file) {
+                    ranges.push([coverageRange.range.start.line, coverageRange.range.end.line]);
+                }
+                let totalFileCovered = countRanges(ranges);
+                if (!fileCoverage.has(directoryName)) {
+                    fileCoverage.set(directoryName, new Map<string, number>());
+                }
+                fileCoverage.get(directoryName)!.set(fileName, totalFileCovered);
+                totalDirectoryCovered += totalFileCovered;
+            }
+            directoryCoverage.set(directoryName, totalDirectoryCovered);
+        }
+
+        for (let directoryName of lineTotals.keys()) {
+            let directory = lineTotals.get(directoryName)!;
+            let totalDirectoryCovered = directoryCoverage.get(directoryName);
+            totalDirectoryCovered = totalDirectoryCovered == undefined ? 0 : totalDirectoryCovered;
+
+            if (directory.size == 0) {
+                continue;
+            }
+
+            csvRows.push([directoryName, "", totalDirectoryCovered, 0]);
+            let directoryTotal = 0;
+            let dirRow = csvRows[csvRows.length - 1];
+
+            for (let fileName of directory.keys()) {
+                let totalLines = directory.get(fileName)!;
+                directoryTotal += totalLines;
+                let totalFileCovered = 0;
+                if (fileCoverage.has(directoryName)) {
+                    let directoryFiles = fileCoverage.get(directoryName)!;
+                    if (directoryFiles.has(fileName)) {
+                        totalFileCovered = directoryFiles.get(fileName)!;
+                    }
+                }
+                csvRows.push(["", fileName, totalFileCovered, totalLines]);
+            }
+            dirRow[3] = directoryTotal;
+        }
+    }
+
+    
+    let result = "";
+    for (let row of csvRows) {
+        result += row.join(",") + "\n";
+    }
+    return result.trimEnd();
 }
 
 export function copy(data: string) {
