@@ -85,7 +85,11 @@ class CoverageExtension {
 
         let date = `${month}-${day}-${year}`;
 
-        const outputPath = resolvePathWithEnvVariable(`%UserProfile%/Flexware Innovation, Inc/Logan Aluminum - 204892_CM2 Level 2 Conversion/Project Management/Coverage Summaries/summary-${date}`);
+        let [outputPathSetting] = getSettings(["summaryOutputPath"]);
+
+        if (outputPathSetting == null) outputPathSetting = "/";
+
+        const outputPath = resolvePathWithEnvVariable(path.join(outputPathSetting, `summary-${date}`));
 
         let uri = vscode.Uri.file(outputPath);
         vscode.window.showSaveDialog({
@@ -172,23 +176,62 @@ function isFortranFile(dirent: Dirent): boolean {
     return false;
 }
 
+function getSettings(settingKeys: string[]): Array<any> {
+    if (vscode.workspace.rootPath === undefined) {
+        throw new Error("No workspace open");
+    }
+
+    let vscodePath = path.join(vscode.workspace.rootPath, ".vscode");
+    let settingsPath = path.join(vscodePath, "coverage_from_comments_config.json");
+
+    if (!existsSync(settingsPath)) {
+        return new Array(settingKeys.length);
+    }
+
+    let settingsJson = JSON.parse(readFileSync(settingsPath, {"encoding": "utf-8"}));
+    let result: Array<any> = [];
+    for (let key of settingKeys) {
+        if (key in settingsJson) {
+            result.push(settingsJson[key]);
+        } else {
+            result.push(null);
+        }
+    }
+    return result;
+}
+
+function matchesAny(item: string, regexPatterns: Array<string>): boolean {
+    for (let pattern of regexPatterns) {
+        if (item.match(new RegExp(pattern, "i"))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function getLineTotals(dir: string): Map<string, Map<string, number>> {
     if (vscode.workspace.rootPath === undefined) {
         throw new Error("No workspace open");
     }
     dir = path.join(vscode.workspace.rootPath, dir);
     if (!existsSync(dir)) {
-        vscode.window.showErrorMessage("Unable to find root project directory");
+        vscode.window.showErrorMessage("Unable to find root project directory for project: " + dir);
         throw new Error("Unable to find root project directory");
     }
+
+    let [excludedFiles, excludedDirectories, includedFiles] = getSettings(["summaryExcludedFiles", "summaryExcludedDirectories", "summaryIncludedFiles"]);
+    if (excludedFiles == null) excludedFiles = [];
+    if (excludedDirectories == null) excludedDirectories = [];
+    if (includedFiles == null) includedFiles = [];
+    
     let result = new Map<string, Map<string, number>>();
 
     let folders = readdirSync(dir, {encoding: "utf-8", recursive: false, withFileTypes: true});
-    for (let folder of folders.filter(f => f.isDirectory())) {
+    for (let folder of folders.filter(f => f.isDirectory() && !matchesAny(f.name, excludedDirectories))) {
         let summary = new Map<string, number>();
         result.set(folder.name, summary);
         let files = readdirSync(path.join(dir, folder.name), {encoding: "utf-8", recursive: true, withFileTypes: true});
-        for (let file of files.filter(isFortranFile)) {
+        for (let file of files.filter(f => f.isFile() && !matchesAny(f.name, excludedFiles) && matchesAny(f.name, includedFiles))) {
             summary.set(file.name, countFile(path.join(dir, folder.name, file.name)));
         }
     }
@@ -221,7 +264,12 @@ function summarize(target: any): string {
     let csvRows: Array<[string,string,string|number,string|number]> = [["directory","file","covered","total"]];
     for (let projectName in target) {
         let project = target[projectName];
-        let lineTotals = getLineTotals(projectName);
+        let lineTotals: Map<string, Map<string, number>>;
+        try {
+            lineTotals = getLineTotals(projectName);
+        } catch (ex) {
+            continue;
+        }
         let fileCoverage = new Map<string, Map<string, number>>();
         let directoryCoverage = new Map<string, number>();
         for (let directoryName in project) {
