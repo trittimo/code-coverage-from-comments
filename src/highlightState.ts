@@ -1,5 +1,5 @@
 import * as vscode from  "vscode";
-import { FileChangeWatcher } from "./sourceWatcher";
+import { FileChangeWatcher } from "./fileWatcher";
 import { EditorWatcher } from "./editorWatcher";
 import { readFile } from "fs";
 import path = require("path");
@@ -80,29 +80,24 @@ function getDeletedReferences(prevMatches: Set<string>, currMatches: Set<string>
 }
 
 export class HighlightState implements FileChangeWatcher {
-    editorWatcher: EditorWatcher;
     // Maps a targetPath to the list of applicable CoverageRange object keys
     // Why not a set of CoverageRange? Because javascript hasn't figured out how to do hashCodes for objects yet
     // Which is just incredible
     // These are what are used to actually render match ranges upon request by the EditorWatcher subscriber
-    keyToCoverageMap: Map<string, CoverageRange>;
-    targetToCoverageMap: Map<string, Set<string>>;
+    keyToCoverageMap: Map<string, CoverageRange> = new Map();
+    targetToCoverageMap: Map<string, Set<string>> = new Map();
 
     // Maps a sourcePath to the list of CoverageRanges it 'owns'
     // We use this when a file is deleted or modified to remove the matches created by it
-    sourceToCoverageMap: Map<string, Set<string>>;
+    sourceToCoverageMap: Map<string, Set<string>> = new Map();
 
-    regexHandler: RegexHandler;
+    regexHandler: RegexHandler = new RegexHandler();
 
-    constructor(editorWatcher: EditorWatcher) {
-        this.editorWatcher = editorWatcher;
-        this.keyToCoverageMap = new Map();
-        this.targetToCoverageMap = new Map();
-        this.sourceToCoverageMap = new Map();
-        this.regexHandler = new RegexHandler();
+    constructor() {
+        
     }
 
-    onChange(uri: vscode.Uri) {
+    onFileChange(uri: vscode.Uri) {
         // Read the changed file and identify all the comments relevant to us
         // If there are any comments in the coverage format, construct a list of URIs pointing to those files and notify the EditorWatcher
 
@@ -174,13 +169,11 @@ export class HighlightState implements FileChangeWatcher {
                 }
             }
 
-            // Notify the editor watcher that we have had an external change
-            this.editorWatcher.notifyOfExternalChange(changedFiles);
             this.sourceToCoverageMap.set(sourcePath, currMatches);
         });
     }
 
-    onDelete(uri: vscode.Uri) {
+    onFileDelete(uri: vscode.Uri) {
         // Check which file has been changed and remove all the coverage comments which were sourced from them
         let sourcePath = path.resolve(uri.fsPath);
         let sourceSet = this.sourceToCoverageMap.get(sourcePath);

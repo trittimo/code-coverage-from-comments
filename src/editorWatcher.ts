@@ -2,85 +2,58 @@ import path = require('path');
 import * as vscode from 'vscode';
 
 export interface EditorChangeWatcher {
-    onChange(editor: vscode.TextEditor): any;
-    dispose(): any;
+    onEditorChange(editor: vscode.TextEditor): any;
 }
 
 // Watches the active editors for any changes that would require re-rendering the decorations
 export class EditorWatcher {
-    renderFileTypes: string[];
-    subscribers: EditorChangeWatcher[];
-    changeWatchers: vscode.Disposable[];
-    
-    constructor(renderFileTypes: string[]) {
-        this.renderFileTypes = renderFileTypes;
-        this.subscribers = [];
-        this.changeWatchers = [];
-    }
+    subscribers: EditorChangeWatcher[] = [];
+    disposables: vscode.Disposable[] = [];
 
-    // Checks whether the given TextDocument requires rendering based on our configuration
-    private isDocumentRelevant(document: vscode.TextDocument): boolean {
-        for (let fileType of this.renderFileTypes) {
-            let workspace = vscode.workspace.getWorkspaceFolder(document.uri);
-            if (!workspace) {
-                continue;
-            }
-            // Constructs a glob pattern relative to the root of the workspace containing the editor
-            let glob = new vscode.RelativePattern(workspace.uri, fileType);
-            if (vscode.languages.match({ pattern: glob }, document)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    setup(): EditorWatcher {
-        this.changeWatchers.push(vscode.window.onDidChangeActiveTextEditor(e => {
-            // This notifies subscribers when the user switches the currently active editor (i.e. by switching tabs)
-            // console.log("Active text editor changed");
-            if (e && this.isDocumentRelevant(e.document)) {
-                this.subscribers.forEach(s => s.onChange(e));
+    constructor() {
+        // This notifies subscribers when the user switches the currently active editor (e.g. by switching tabs or opening a new tab)
+        this.disposables.push(vscode.window.onDidChangeActiveTextEditor(e => {
+            if (e) {
+                this.subscribers.forEach(s => s.onEditorChange(e));
             }
         }));
 
-        this.changeWatchers.push(vscode.workspace.onDidChangeTextDocument(changedEditor => {
+        // This notifies subscribers when the user makes a text change to a currently visible editor
+        this.disposables.push(vscode.workspace.onDidChangeTextDocument(changeEvent => {
             console.log("TextDocument changed");
-            // This notifies subscribers when the user makes a text change to the currently active editor
-            let relevantEditors = vscode.window.visibleTextEditors.filter(
-                visibleEditor => visibleEditor.document.uri === changedEditor.document.uri && this.isDocumentRelevant(changedEditor.document)
-            );
-            for (let editor of relevantEditors) {
-                this.subscribers.forEach(s => s.onChange(editor));
+
+            for (let subscriber of this.subscribers) {
+                for (let editor of vscode.window.visibleTextEditors) {
+                    if (editor.document.uri === changeEvent.document.uri) {
+                        subscriber.onEditorChange(editor);
+                    }
+                }
             }
         }));
+    }
 
+    addSubscriber(subscriber: EditorChangeWatcher): EditorWatcher {
+        this.subscribers.push(subscriber);
         return this;
     }
 
-    // This function is called by the HighlightState tracker when there is a change to a relevant source file
-    // It will only notify any subscribers if there is a visible editor relevant to them
-    notifyOfExternalChange(relevantPaths: Set<string>) {
-        for (let uri of relevantPaths) {
-            vscode.window.visibleTextEditors.filter(editor => {
-                // Filter down to visible text editors with the same URI path as one of the relevant URIs
-                let editorPath = path.resolve(editor.document.uri.fsPath);
-                return uri === editorPath;
-            }).forEach(editor => {
-                // Notify the subscribers of the change
-                this.subscribers.forEach(s => s.onChange(editor));
-            })
+    notifyAll(): EditorWatcher {
+        for (let subscriber of this.subscribers) {
+            this.notifyOne(subscriber);
         }
+        return this;
     }
 
-    addSubscriber(subscriber: EditorChangeWatcher) {
-        this.subscribers.push(subscriber);
+    notifyOne(subscriber: EditorChangeWatcher): EditorWatcher {
+        for (let editor of vscode.window.visibleTextEditors) {
+            subscriber.onEditorChange(editor);
+        }
+        return this;
     }
 
     dispose() {
-        this.subscribers.forEach(s => s.dispose());
-        this.changeWatchers.forEach(s => s.dispose());
-
+        this.disposables.forEach(d => d.dispose());
+        this.disposables = [];
         this.subscribers = [];
-        this.changeWatchers = [];
     }
 }

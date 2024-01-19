@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { EditorWatcher } from './editorWatcher';
-import { SourceWatcher } from './sourceWatcher';
+import { FileWatcher } from './fileWatcher';
 import { CoverageRange, HighlightState } from './highlightState';
 import { DecorationManager } from './decorationManager';
 import { DocumentDetailProvider } from './documentDetailProvider';
@@ -25,12 +25,14 @@ class CoverageExtension {
 
         // The editor watcher is responsible for checking whether an active editor relevant to rendering has changed, and if so notify subscribers of that change
         // The subscriber(s) of this are responsible for rendering highlight ranges inside of a text editor based on the state provided by sourceWatcher states
-        let editorWatcher = new EditorWatcher(config.get("renderFileTypes", [])).setup();
+        let renderFileTypes = config.get("renderFileTypes", []);
+        let commentSourceFileTypes = config.get("commentSourceFileTypes", []);
+        let editorWatcher = new EditorWatcher().setup();
         this.disposables.push(editorWatcher);
 
-        // The source watcher is responsible for checking whether a relevant source file has changed, and if so notify subscribers of that chnage
+        // The source watcher is responsible for checking whether a relevant source file has changed, and if so notify subscribers of that change
         // The subscriber(s) of this are responsible for maintaining the highlight range states
-        let sourceWatcher = new SourceWatcher(config.get("commentSourceFileTypes", [])).setup();
+        let sourceWatcher = new FileWatcher(config.get("commentSourceFileTypes", [])).setup();
         this.disposables.push(sourceWatcher);
 
         // This is the class responsible for reading file contents and maintaining the state of comment coverage
@@ -46,7 +48,7 @@ class CoverageExtension {
         let documentDetailProvider = new DocumentDetailProvider(config.get("renderFileTypes", []), this.highlightState);
         let selector = documentDetailProvider.getSelector();
 
-        sourceWatcher.forceNotify();
+        sourceWatcher.notify();
 
         this.context.subscriptions.push(
             //vscode.languages.registerDocumentSymbolProvider(selector, documentDetailProvider),
@@ -167,13 +169,6 @@ function countFile(path: string): number {
 
     let fileContent = readFileSync(path, {encoding: "utf-8"});
     return fileContent.split("\n").length;
-}
-
-function isFortranFile(dirent: Dirent): boolean {
-    if (!dirent.isFile()) return false;
-    let name = dirent.name.toLowerCase();
-    if (name.endsWith(".inc") || name.endsWith(".for") || name.endsWith(".pf")) return true;
-    return false;
 }
 
 function getSettings(settingKeys: string[]): Array<any> {
@@ -457,6 +452,3 @@ export function activate(context: vscode.ExtensionContext) {
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
-
-
-// Allow adding a list of line numbers e.g. L50-L52,L70-L75
