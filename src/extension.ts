@@ -169,13 +169,6 @@ function countFile(path: string): number {
     return fileContent.split("\n").length;
 }
 
-function isFortranFile(dirent: Dirent): boolean {
-    if (!dirent.isFile()) return false;
-    let name = dirent.name.toLowerCase();
-    if (name.endsWith(".inc") || name.endsWith(".for") || name.endsWith(".pf")) return true;
-    return false;
-}
-
 function getSettings(settingKeys: string[]): Array<any> {
     if (vscode.workspace.rootPath === undefined) {
         throw new Error("No workspace open");
@@ -230,7 +223,9 @@ function getLineTotals(dir: string): Map<string, Map<string, number>> {
     for (let folder of folders.filter(f => f.isDirectory() && !matchesAny(f.name, excludedDirectories))) {
         let summary = new Map<string, number>();
         result.set(folder.name, summary);
-        let files = readdirSync(path.join(dir, folder.name), {encoding: "utf-8", recursive: true, withFileTypes: true});
+        // NOTE: ideally recursive: true would be set here, but a bug in NodeJS prevents recursive from working if you have withFileTypes: true
+        // https://github.com/nodejs/node/issues/48858
+        let files = readdirSync(path.join(dir, folder.name), {encoding: "utf-8", recursive: false, withFileTypes: true});
         for (let file of files.filter(f => f.isFile() && !matchesAny(f.name, excludedFiles) && matchesAny(f.name, includedFiles))) {
             summary.set(file.name, countFile(path.join(dir, folder.name, file.name)));
         }
@@ -268,6 +263,7 @@ function summarize(target: any): string {
         try {
             lineTotals = getLineTotals(projectName);
         } catch (ex) {
+            console.error(ex);
             continue;
         }
         let fileCoverage = new Map<string, Map<string, number>>();
